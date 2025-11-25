@@ -1,0 +1,61 @@
+services:
+  nginx:
+    image: nginx:alpine
+    networks:
+      app:
+        aliases:
+          - nginx.docker
+    depends_on:
+      - php
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./configs/nginx/prod:/etc/nginx/conf.d:ro
+      - ./src:/srv/www/app:cached
+      - ./ssl:/etc/nginx/ssl:ro
+    restart: unless-stopped
+
+  php:
+    build: ./images/php
+    networks:
+      app:
+        aliases:
+          - php.docker
+    depends_on:
+      - mysql
+    environment:
+      APP_ENV: production
+    volumes:
+      - ./configs/php/www.conf:/usr/local/etc/php-fpm.d/www.conf:ro
+      - ./configs/php/php.prod.ini:/usr/local/etc/php/php.ini:ro
+      - ./src:/srv/www/app:cached
+    restart: unless-stopped
+
+  mysql:
+    build: ./images/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-app}
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    networks:
+      app:
+        aliases:
+          - mysql.docker
+    volumes:
+      - mysql:/var/lib/mysql
+      - ./configs/mysql:/etc/mysql/conf.d:ro
+    restart: unless-stopped
+    # Не открываем порт 3306 наружу на проде
+    # ports:
+    #   - 3306:3306
+
+version: '3.8'
+
+volumes:
+  mysql: {}
+
+networks:
+  app: {}
+

@@ -1,0 +1,94 @@
+services:
+  nginx:
+    image: nginx:alpine
+    networks:
+      app:
+        aliases:
+          - nginx.docker
+    depends_on:
+      - php
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./configs/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./src:/srv/www/app:cached
+
+  php:
+    build: ./images/php
+    networks:
+      app:
+        aliases:
+          - php.docker
+    depends_on:
+      - mysql
+    environment:
+      XDEBUG_CONFIG: 'remote_enable=On remote_connect_back=Off remote_host=${DOCKER_HOST_IP} remote_autostart=On idekey=PHPSTORM max_nesting_level=512 remote_port=9003'
+      PHP_IDE_CONFIG: 'serverName=xdebug-console'
+      APP_ENV: dev
+    volumes:
+      - ./configs/php/www.conf:/usr/local/etc/php-fpm.d/www.conf:ro
+      - ./configs/php/php.ini:/usr/local/etc/php/php.ini:ro
+      - ./src:/srv/www/app:cached
+
+  mysql:
+    build: ./images/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+    networks:
+      app:
+        aliases:
+          - mysql.docker
+    ports:
+      - 3306:3306
+    volumes:
+      - mysql:/var/lib/mysql
+      - ./configs/mysql:/etc/mysql/conf.d:ro
+
+  phpmyadmin:
+    build: ./images/phpmyadmin
+    environment:
+      PMA_HOST: mysql.docker
+      PMA_PORT: 3306
+      PMA_USER: app
+      PMA_PASSWORD: app
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - phpmyadmin:/var/www/html/tmp
+      - ./configs/phpmyadmin:/etc/phpmyadmin:ro
+    ports:
+      - "${PHPMYADMIN_PORT:-8080}:80"
+    networks:
+      - app
+    depends_on:
+      - mysql
+    restart: unless-stopped
+
+  console:
+    build: ./images/console
+    command: /bin/bash
+    hostname: app
+    environment:
+      XDEBUG_CONFIG: 'remote_enable=On remote_connect_back=Off remote_host=${DOCKER_HOST_IP} remote_autostart=1 idekey=PHPSTORM max_nesting_level=512 remote_port=9003'
+      PHP_IDE_CONFIG: 'serverName=xdebug-console'
+    networks:
+      app: {}
+    depends_on:
+      - mysql
+    volumes:
+      - ./configs/php/php.ini:/usr/local/etc/php/php.ini:ro
+      - ./src:/srv/www/app:cached
+
+version: '3.8'
+
+volumes:
+  mysql: {}
+  phpmyadmin: {}
+
+networks:
+  app: {}
+
+
