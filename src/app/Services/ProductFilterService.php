@@ -7,11 +7,16 @@ namespace App\Services;
 use App\Enums\AttributeType;
 use App\Models\Attribute;
 use App\Models\Product;
+use App\Services\ProductFilter\AttributeFilterStrategyFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 class ProductFilterService
 {
+    public function __construct(
+        private readonly AttributeFilterStrategyFactory $strategyFactory
+    ) {
+    }
     /**
      * Filter products based on criteria.
      *
@@ -29,18 +34,29 @@ class ProductFilterService
             $query->where('category_id', '=', $filters['category_id']);
         }
 
-        // Filter by manufacturer
+        // Filter by manufacturer(s) - can be single ID or array of IDs
         if (isset($filters['manufacturer_id'])) {
-            $query->where('manufacturer_id', '=', $filters['manufacturer_id']);
+            if (is_array($filters['manufacturer_id'])) {
+                $query->whereIn('manufacturer_id', $filters['manufacturer_id']);
+            } else {
+                $query->where('manufacturer_id', '=', $filters['manufacturer_id']);
+            }
         }
 
         // Filter by price range
-        if (isset($filters['price_min'])) {
+        if (!empty($filters['price_min'])) {
             $query->where('price', '>=', $filters['price_min']);
         }
 
-        if (isset($filters['price_max'])) {
+        if (!empty($filters['price_max'])) {
             $query->where('price', '<=', $filters['price_max']);
+        }
+        
+        // Validate price range if both are set
+        if (!empty($filters['price_min']) && !empty($filters['price_max'])
+            && $filters['price_min'] > $filters['price_max']) {
+            // If min > max, return empty results
+            $query->whereRaw('1 = 0');
         }
 
         // Filter by attributes
@@ -49,7 +65,14 @@ class ProductFilterService
         }
 
         // Load relationships for response
-        $query->with(['category', 'manufacturer', 'attributeValues.attribute', 'attributeValues.attributeOption']);
+        // Load category attributes to filter product attributes
+        $query->with([
+            'category',
+            'category.attributes', // Load category attributes to filter product attributes
+            'manufacturer',
+            'attributeValues.attribute',
+            'attributeValues.attributeOption'
+        ]);
 
         return $query->paginate($limit, ['*'], 'page', $page)->withQueryString();
     }
@@ -92,27 +115,14 @@ class ProductFilterService
 
             $attributeType = AttributeType::tryFrom($attribute->type_id);
 
-            $query->whereHas('attributeValues', function (Builder $subQuery) use ($attributeId, $value, $attributeType) {
-                $subQuery->where('attribute_id', '=', $attributeId);
+            if ($attributeType === null) {
+                continue;
+            }
 
-                // For LIST type, filter by attribute_option_id
-                if ($attributeType === AttributeType::LIST) {
-                    // Value can be array of option IDs or single option ID
-                    $optionIds = is_array($value) ? $value : [$value];
-                    $subQuery->whereIn('attribute_option_id', array_map('intval', $optionIds));
-                } elseif ($attributeType === AttributeType::DECIMAL || $attributeType === AttributeType::INTEGER) {
-                    // For numeric types, filter by value_decimal
-                    if (is_array($value) && count($value) === 2) {
-                        // Range: [min, max]
-                        $subQuery->whereBetween('value_decimal', [(float) $value[0], (float) $value[1]]);
-                    } else {
-                        // Exact value
-                        $subQuery->where('value_decimal', '=', (float) $value);
-                    }
-                } else {
-                    // For STRING and BOOLEAN, filter by value_text
-                    $subQuery->where('value_text', '=', (string) $value);
-                }
+            $strategy = $this->strategyFactory->create($attributeType);
+
+            $query->whereHas('attributeValues', function (Builder $subQuery) use ($attributeId, $value, $strategy) {
+                $strategy->apply($subQuery, $attributeId, $value);
             });
         }
     }

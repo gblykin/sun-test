@@ -82,6 +82,17 @@ services:
       - ./configs/php/php.ini:/usr/local/etc/php/php.ini:ro
       - ./src:/srv/www/app:cached
 
+  node:
+    build: ./images/node
+    working_dir: /srv/www/app
+    volumes:
+      - ./src:/srv/www/app:cached
+    networks:
+      app: {}
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "5173:5173"
+
 version: '3.8'
 
 volumes:

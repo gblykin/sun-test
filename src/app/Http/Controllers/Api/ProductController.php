@@ -27,7 +27,7 @@ class ProductController extends Controller
      * @return JsonResponse
      */
     public function search(ProductSearchRequest $request): JsonResponse
-    {
+    {        
         $products = $this->searchService->search(
             $request->getQuery(),
             $request->getLimit()
@@ -51,6 +51,27 @@ class ProductController extends Controller
         );
 
         return ProductResource::collection($products)->response();
+    }
+
+    /**
+     * Get a single product by slug.
+     *
+     * @param string $slug
+     * @return JsonResponse
+     */
+    public function show(string $slug): JsonResponse
+    {
+        $product = \App\Models\Product::where('slug', '=', $slug)
+            ->with([
+                'category',
+                'category.attributes',
+                'manufacturer',
+                'attributeValues.attribute',
+                'attributeValues.attributeOption'
+            ])
+            ->firstOrFail();
+
+        return (new ProductResource($product))->response();
     }
 }
 

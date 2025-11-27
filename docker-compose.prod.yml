@@ -9,11 +9,11 @@ services:
       - php
     ports:
       - "80:80"
-      - "443:443"
+      #- "443:443"
     volumes:
       - ./configs/nginx/prod:/etc/nginx/conf.d:ro
       - ./src:/srv/www/app:cached
-      - ./ssl:/etc/nginx/ssl:ro
+      #- ./ssl:/etc/nginx/ssl:ro
     restart: unless-stopped
 
   php:
@@ -47,9 +47,16 @@ services:
       - mysql:/var/lib/mysql
       - ./configs/mysql:/etc/mysql/conf.d:ro
     restart: unless-stopped
-    # Не открываем порт 3306 наружу на проде
+    # Do not expose port 3306 externally in production
     # ports:
     #   - 3306:3306
+  node:
+    build: ./images/node
+    working_dir: /srv/www/app
+    volumes:
+      - ./src:/srv/www/app:cached
+    networks:
+      app: {}    
 
 version: '3.8'
 

@@ -116,12 +116,50 @@ class DatabaseWriter implements WriterInterface
         $attributeId = $attributeData['attribute_id'];
 
         match ($type) {
-            AttributeType::DECIMAL, AttributeType::INTEGER => $valueData['value_decimal'] = (float) $value,
-            AttributeType::STRING, AttributeType::BOOLEAN => $valueData['value_text'] = (string) $value,
+            AttributeType::DECIMAL, AttributeType::INTEGER, AttributeType::BOOLEAN => $valueData['value_decimal'] = $this->convertToDecimal($type, $value),
+            AttributeType::STRING => $valueData['value_text'] = (string) $value,
             AttributeType::LIST => $valueData['attribute_option_id'] = $this->attributeMapper->getOrCreateAttributeOption($attributeId, (string) $value),
         };
 
         ProductAttributeValue::create($valueData);
+    }
+
+    /**
+     * Convert value to decimal based on attribute type.
+     *
+     * @param AttributeType $type
+     * @param mixed $value
+     * @return float
+     */
+    private function convertToDecimal(AttributeType $type, mixed $value): float
+    {
+        if ($type === AttributeType::BOOLEAN) {
+            // Convert boolean to 1.0 or 0.0
+            return $this->normalizeBooleanToDecimal($value);
+        }
+
+        return (float) $value;
+    }
+
+    /**
+     * Normalize boolean value to decimal (1.0 for true, 0.0 for false).
+     *
+     * @param mixed $value
+     * @return float
+     */
+    private function normalizeBooleanToDecimal(mixed $value): float
+    {
+        if (is_bool($value)) {
+            return $value ? 1.0 : 0.0;
+        }
+
+        $normalized = strtolower(trim((string) $value));
+
+        return match ($normalized) {
+            '1', 'true', 'yes', 'on', 'y' => 1.0,
+            '0', 'false', 'no', 'off', 'n' => 0.0,
+            default => (float) $value, // Try to cast if not recognized
+        };
     }
 }
 
